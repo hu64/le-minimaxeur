@@ -18,7 +18,7 @@ def main():
 
         if line == "uci":
             print("id name RandomMoves")
-            print("id author You")
+            print("id author Hughes Perreault")
             print("uciok")
             sys.stdout.flush()
 
