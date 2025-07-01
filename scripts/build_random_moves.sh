@@ -1,0 +1,1 @@
+pyinstaller --onefile --distpath engines uci_random_moves.py

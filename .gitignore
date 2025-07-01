@@ -9,3 +9,8 @@ lichess_bot_auto_logs/*
 *.log
 *.txt
 TEMP/*
+
+# PyInstaller build artifacts
+/build/
+/dist/
+/*.spec
