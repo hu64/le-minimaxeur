@@ -105,55 +105,43 @@ def order_moves(board):
     # Sort moves by their heuristic score in descending order
     return sorted(board.legal_moves, key=move_score, reverse=True)
 
-def quiescence_search(board, alpha, beta, start_time, time_limit):
-    """Perform quiescence search to evaluate tactical positions."""
-    # Check if time limit is exceeded
-    if time.time() - start_time > time_limit:
-        return evaluate_board(board)
-    # Evaluate the current position (static evaluation)
-    static_eval = evaluate_board(board)
-
-    # Stand Pat
-    best_value = static_eval
-    if best_value >= beta:
-        return best_value
-    if best_value > alpha:
-        alpha = best_value
-
-    # Examine all captures
-    for move in board.legal_moves:
-        if not board.is_capture(move):  # Only consider captures
-            continue
-
-        board.push(move)
-        score = -quiescence_search(board, -beta, -alpha, start_time, time_limit)
-        
-        board.pop()
-
-        # Beta cutoff
-        if score >= beta:
-            return score
-
-        # Update best value and alpha
-        if score > best_value:
-            best_value = score
-        if score > alpha:
-            alpha = score
-
-    return best_value
-
-
 def minimax(board, depth, alpha, beta, maximizing_player, start_time, time_limit):
     """Minimax algorithm with Alpha-Beta Pruning."""
     if time.time() - start_time > time_limit:
         return evaluate_board(board)
 
-    if depth == 0 or board.is_game_over():
-        # Perform quiescence search if we are at a leaf node
-        if maximizing_player:
-            return quiescence_search(board, alpha, beta, start_time, time_limit)
-
-    if board.is_game_over() or depth <= 0:
+    if depth <= 0 or board.is_game_over():
+        if any(board.is_capture(move) for move in board.legal_moves):
+            if maximizing_player:
+                max_eval = -float('inf')
+                for move in order_moves(board):
+                    if not board.is_capture(move):  # Only consider captures
+                        continue
+                    board.push(move)
+                    eval = minimax(board, depth - 1, alpha, beta, not maximizing_player, start_time, time_limit)
+                    board.pop()
+                    if eval > max_eval:
+                        max_eval = eval
+                        best_move = move
+                    alpha = max(alpha, eval)
+                    if beta <= alpha:
+                        break
+                return max_eval
+            else:
+                min_eval = float('inf')
+                for move in order_moves(board):
+                    if not board.is_capture(move):  # Only consider captures
+                        continue
+                    board.push(move)
+                    eval = minimax(board, depth - 1, alpha, beta, not maximizing_player, start_time, time_limit)
+                    board.pop()
+                    if eval < min_eval:
+                        min_eval = eval
+                        best_move = move
+                    beta = min(beta, eval)
+                    if beta <= alpha:
+                        break
+                return min_eval
         return evaluate_board(board)
 
     best_move = None
