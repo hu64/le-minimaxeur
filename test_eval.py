@@ -6,16 +6,18 @@ def test_evaluation():
     # Create a new board
     board = chess.Board()
 
-    # # Print the starting position
-    # print("Starting Position:")
-    # print(board)
-    # print(f"Evaluation: {evaluate_board(board)}\n")
+    # Print the starting position
+    print("Starting Position:")
+    print(board)
+    print(f"Evaluation: {evaluate_board(board)}\n")
+    print(f"Best Move: {find_best_move(board, 3, 10000)}\n")
 
-    # # Set up a custom position (e.g., White is winning)
-    # board.set_fen("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1")  # After 1. e4
-    # print("Custom Position 1 (After 1. e4):")
-    # print(board)
-    # print(f"Evaluation: {evaluate_board(board)}\n")
+    # Set up a custom position (e.g., White is winning)
+    board.set_fen("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1")  # After 1. e4
+    print("Custom Position 1 (After 1. e4):")
+    print(board)
+    print(f"Evaluation: {evaluate_board(board)}\n")
+    print(f"Best Move: {find_best_move(board, 3, 10000)}\n")
 
     # # Set up another custom position (e.g., Black is winning)
     # board.set_fen("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1")  # After 1... e5
@@ -62,17 +64,17 @@ def test_evaluation():
     # print(f"Best Move: {find_best_move(board, 3, 10000)}\n")
 
     
-    # board.set_fen("kbK5/pp6/1P6/8/8/8/R7/8 w - - 0 2") 
-    # print("mate in 2 (a2a6):")
-    # print(board)
-    # print(f"Evaluation: {evaluate_board(board)}\n")
-    # print(f"Best Move: {find_best_move(board, 3, 10000)}\n")
+    board.set_fen("kbK5/pp6/1P6/8/8/8/R7/8 w - - 0 2") 
+    print("mate in 2 (a2a6):")
+    print(board)
+    print(f"Evaluation: {evaluate_board(board)}\n")
+    print(f"Best Move: {find_best_move(board, 3, 10000)}\n")
 
-    # board.set_fen("rnbqkbnr/ppp2ppp/3p4/4p3/4P1Q1/8/PPPP1PPP/RNB1KBNR b KQkq - 1 3") 
-    # print("black wins a queen (c8g4) :")
-    # print(board)
-    # print(f"Evaluation: {evaluate_board(board)}\n")
-    # print(f"Best Move: {find_best_move(board, 3, 10000)}\n")
+    board.set_fen("rnbqkbnr/ppp2ppp/3p4/4p3/4P1Q1/8/PPPP1PPP/RNB1KBNR b KQkq - 1 3") 
+    print("black wins a queen (c8g4) :")
+    print(board)
+    print(f"Evaluation: {evaluate_board(board)}\n")
+    print(f"Best Move: {find_best_move(board, 3, 10000)}\n")
 
 
     board.set_fen("rnbqkbnr/1pp2ppp/p2p4/4p1B1/4P3/3P4/PPP2PPP/RN1QKBNR w KQkq - 0 4") 

@@ -6,6 +6,19 @@ import time
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
+# Configure logging
+logging.basicConfig(filename="uci_log.txt", level=logging.DEBUG, format="%(asctime)s - %(message)s")
+
+
+# Material values
+MATERIAL_VALUES = {
+    chess.PAWN: 100,
+    chess.KNIGHT: 320,
+    chess.BISHOP: 330,
+    chess.ROOK: 500,
+    chess.QUEEN: 900,
+    chess.KING: 0  # King is not captured
+}
 
 # Material evaluation function
 def evaluate_board(board):
@@ -16,24 +29,15 @@ def evaluate_board(board):
     if board.is_stalemate() or board.is_insufficient_material():
         return 0
 
-    # Material values
-    material_values = {
-        chess.PAWN: 100,
-        chess.KNIGHT: 320,
-        chess.BISHOP: 330,
-        chess.ROOK: 500,
-        chess.QUEEN: 900,
-    }
-
     # Development bonus
     development_bonus = 10
 
     # Calculate material score
     score = 0
-    for piece_type in material_values:
+    for piece_type in MATERIAL_VALUES:
         # logging.debug(f"There are {len(board.pieces(piece_type, chess.WHITE))} {chess.PIECE_NAMES[piece_type]} for White and {len(board.pieces(piece_type, chess.BLACK))} for Black")
-        score += len(board.pieces(piece_type, chess.WHITE)) * material_values[piece_type]
-        score -= len(board.pieces(piece_type, chess.BLACK)) * material_values[piece_type]
+        score += len(board.pieces(piece_type, chess.WHITE)) * MATERIAL_VALUES[piece_type]
+        score -= len(board.pieces(piece_type, chess.BLACK)) * MATERIAL_VALUES[piece_type]
 
     # # Add development bonus for White
     # for square in board.pieces(chess.KNIGHT, chess.WHITE) | board.pieces(chess.BISHOP, chess.WHITE) | board.pieces(chess.ROOK, chess.WHITE) | board.pieces(chess.QUEEN, chess.WHITE):
@@ -50,6 +54,7 @@ def evaluate_board(board):
     # score += mobility_bonus if board.turn else -mobility_bonus
 
     # Penalize threefold repetition
+
     if board.is_repetition():
         score -= 50 if board.turn else -50  # Penalize repetition heavily
         
@@ -63,9 +68,15 @@ def order_moves(board):
         if board.is_capture(move):
             captured_piece = board.piece_at(move.to_square)
             capturing_piece = board.piece_at(move.from_square)
-            captured_value = piece_value(captured_piece) if captured_piece else 0
-            capturing_value = piece_value(capturing_piece) if capturing_piece else 0
-            return 100 + captured_value - capturing_value
+            if captured_piece is None:
+                captured_value = 0
+            else:
+                captured_value = MATERIAL_VALUES.get(captured_piece.piece_type, 0)
+            if capturing_piece is None:
+                capturing_value = 0
+            else:
+                capturing_value = MATERIAL_VALUES.get(capturing_piece.piece_type, 0)
+            return 100 + ((captured_value - capturing_value)/100)
 
         # Prioritize castling
         if board.is_castling(move):
@@ -91,20 +102,6 @@ def order_moves(board):
 
         return 0  # Default score for other moves
 
-    def piece_value(piece):
-        """Assign a value to each piece type."""
-        if piece is None:
-            return 0
-        values = {
-            chess.PAWN: 1,
-            chess.KNIGHT: 3,
-            chess.BISHOP: 3,
-            chess.ROOK: 5,
-            chess.QUEEN: 9,
-            chess.KING: 0  # King is not captured
-        }
-        return values.get(piece.piece_type, 0)
-
     # Sort moves by their heuristic score in descending order
     return sorted(board.legal_moves, key=move_score, reverse=True)
 
@@ -113,32 +110,37 @@ def quiescence_search(board, alpha, beta, start_time, time_limit):
     # Check if time limit is exceeded
     if time.time() - start_time > time_limit:
         return evaluate_board(board)
+    # Evaluate the current position (static evaluation)
+    static_eval = evaluate_board(board)
 
-    stand_pat = evaluate_board(board)
+    # Stand Pat
+    best_value = static_eval
+    if best_value >= beta:
+        return best_value
+    if best_value > alpha:
+        alpha = best_value
 
-    # Alpha-beta pruning
-    if stand_pat >= beta:
-        return beta
-    if alpha < stand_pat:
-        alpha = stand_pat
-
-    # Consider only captures and checks
+    # Examine all captures
     for move in board.legal_moves:
-        # Check time limit before processing each move
-        if time.time() - start_time > time_limit:
-            break
+        if not board.is_capture(move):  # Only consider captures
+            continue
 
-        if board.is_capture(move) or board.gives_check(move):
-            board.push(move)
-            score = -quiescence_search(board, -beta, -alpha, start_time, time_limit)
-            board.pop()
+        board.push(move)
+        score = -quiescence_search(board, -beta, -alpha, start_time, time_limit)
+        
+        board.pop()
 
-            if score >= beta:
-                return beta
-            if score > alpha:
-                alpha = score
+        # Beta cutoff
+        if score >= beta:
+            return score
 
-    return alpha
+        # Update best value and alpha
+        if score > best_value:
+            best_value = score
+        if score > alpha:
+            alpha = score
+
+    return best_value
 
 
 def minimax(board, depth, alpha, beta, maximizing_player, start_time, time_limit):
@@ -146,10 +148,12 @@ def minimax(board, depth, alpha, beta, maximizing_player, start_time, time_limit
     if time.time() - start_time > time_limit:
         return evaluate_board(board)
 
-    # if depth == 0 or board.is_game_over():
-    #     return quiescence_search(board, alpha, beta, start_time, time_limit)
-
     if depth == 0 or board.is_game_over():
+        # Perform quiescence search if we are at a leaf node
+        if maximizing_player:
+            return quiescence_search(board, alpha, beta, start_time, time_limit)
+
+    if board.is_game_over() or depth <= 0:
         return evaluate_board(board)
 
     best_move = None
@@ -233,6 +237,8 @@ def main():
         elif line == "isready":
             print("readyok")
             sys.stdout.flush()
+        elif line == "ucinewgame":
+            board.reset()
         elif line.startswith("position"):
             tokens = line.split()
             if "startpos" in tokens:
