@@ -3,12 +3,16 @@ import sys
 import chess
 import chess.engine
 import time
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
 
 # Material evaluation function
 def evaluate_board(board):
     """Evaluate the board position."""
     if board.is_checkmate():
         return -float('inf') if board.turn else float('inf')
+
     if board.is_stalemate() or board.is_insufficient_material():
         return 0
 
@@ -27,27 +31,28 @@ def evaluate_board(board):
     # Calculate material score
     score = 0
     for piece_type in material_values:
+        # logging.debug(f"There are {len(board.pieces(piece_type, chess.WHITE))} {chess.PIECE_NAMES[piece_type]} for White and {len(board.pieces(piece_type, chess.BLACK))} for Black")
         score += len(board.pieces(piece_type, chess.WHITE)) * material_values[piece_type]
         score -= len(board.pieces(piece_type, chess.BLACK)) * material_values[piece_type]
 
-    # Add development bonus for White
-    for square in board.pieces(chess.KNIGHT, chess.WHITE) | board.pieces(chess.BISHOP, chess.WHITE) | board.pieces(chess.ROOK, chess.WHITE) | board.pieces(chess.QUEEN, chess.WHITE):
-        if square not in {chess.B1, chess.G1, chess.C1, chess.F1, chess.A1, chess.H1, chess.D1, chess.E1}:  # Starting squares for White
-            score += development_bonus
+    # # Add development bonus for White
+    # for square in board.pieces(chess.KNIGHT, chess.WHITE) | board.pieces(chess.BISHOP, chess.WHITE) | board.pieces(chess.ROOK, chess.WHITE) | board.pieces(chess.QUEEN, chess.WHITE):
+    #     if square not in {chess.B1, chess.G1, chess.C1, chess.F1, chess.A1, chess.H1, chess.D1, chess.E1}:  # Starting squares for White
+    #         score += development_bonus
 
-    # Add development bonus for Black
-    for square in board.pieces(chess.KNIGHT, chess.BLACK) | board.pieces(chess.BISHOP, chess.BLACK) | board.pieces(chess.ROOK, chess.BLACK) | board.pieces(chess.QUEEN, chess.BLACK):
-        if square not in {chess.B8, chess.G8, chess.C8, chess.F8, chess.A8, chess.H8, chess.D8, chess.E8}:  # Starting squares for Black
-            score -= development_bonus
+    # # Add development bonus for Black
+    # for square in board.pieces(chess.KNIGHT, chess.BLACK) | board.pieces(chess.BISHOP, chess.BLACK) | board.pieces(chess.ROOK, chess.BLACK) | board.pieces(chess.QUEEN, chess.BLACK):
+    #     if square not in {chess.B8, chess.G8, chess.C8, chess.F8, chess.A8, chess.H8, chess.D8, chess.E8}:  # Starting squares for Black
+    #         score -= development_bonus
 
-    # Encourage moves that increase mobility
-    mobility_bonus = len(list(board.legal_moves)) * 5
-    score += mobility_bonus if board.turn else -mobility_bonus
+    # # Encourage moves that increase mobility
+    # mobility_bonus = len(list(board.legal_moves)) * 5
+    # score += mobility_bonus if board.turn else -mobility_bonus
 
     # Penalize threefold repetition
     if board.is_repetition():
-        score -= 500 if board.turn else -500  # Penalize repetition heavily
-
+        score -= 50 if board.turn else -50  # Penalize repetition heavily
+        
     return score
 
 # Order moves based on a heuristic
@@ -65,16 +70,6 @@ def order_moves(board):
         # Prioritize castling
         if board.is_castling(move):
             return 90  # High score for castling moves
-
-        # Prioritize moving a piece from its starting square
-        starting_squares = {
-            chess.A1, chess.B1, chess.C1, chess.D1, chess.E1, chess.F1, chess.G1, chess.H1,  # White
-            chess.A2, chess.B2, chess.C2, chess.D2, chess.E2, chess.F2, chess.G2, chess.H2,  # White pawns
-            chess.A8, chess.B8, chess.C8, chess.D8, chess.E8, chess.F8, chess.G8, chess.H8,  # Black
-            chess.A7, chess.B7, chess.C7, chess.D7, chess.E7, chess.F7, chess.G7, chess.H7   # Black pawns
-        }
-        if move.from_square in starting_squares:
-            return 80  # High score for developing pieces
 
         # Prioritize checks
         board.push(move)
@@ -129,6 +124,10 @@ def quiescence_search(board, alpha, beta, start_time, time_limit):
 
     # Consider only captures and checks
     for move in board.legal_moves:
+        # Check time limit before processing each move
+        if time.time() - start_time > time_limit:
+            break
+
         if board.is_capture(move) or board.gives_check(move):
             board.push(move)
             score = -quiescence_search(board, -beta, -alpha, start_time, time_limit)
@@ -141,42 +140,54 @@ def quiescence_search(board, alpha, beta, start_time, time_limit):
 
     return alpha
 
+
 def minimax(board, depth, alpha, beta, maximizing_player, start_time, time_limit):
-    """Minimax algorithm with Alpha-Beta Pruning and Time Management."""
-    # Check if time limit is exceeded
+    """Minimax algorithm with Alpha-Beta Pruning."""
     if time.time() - start_time > time_limit:
         return evaluate_board(board)
 
+    # if depth == 0 or board.is_game_over():
+    #     return quiescence_search(board, alpha, beta, start_time, time_limit)
+
     if depth == 0 or board.is_game_over():
-        return quiescence_search(board, alpha, beta, start_time, time_limit)
+        return evaluate_board(board)
+
+    best_move = None
 
     if maximizing_player:
         max_eval = -float('inf')
         for move in order_moves(board):
             board.push(move)
-            eval = minimax(board, depth - 1, alpha, beta, False, start_time, time_limit)
+            eval = minimax(board, depth - 1, alpha, beta, not maximizing_player, start_time, time_limit)
             board.pop()
-            max_eval = max(max_eval, eval)
+            if eval > max_eval:
+                max_eval = eval
+                best_move = move
             alpha = max(alpha, eval)
             if beta <= alpha:
-                break  # Beta cutoff
+                break
         return max_eval
     else:
         min_eval = float('inf')
         for move in order_moves(board):
             board.push(move)
-            eval = minimax(board, depth - 1, alpha, beta, True, start_time, time_limit)
+            eval = minimax(board, depth - 1, alpha, beta, not maximizing_player, start_time, time_limit)
             board.pop()
-            min_eval = min(min_eval, eval)
+            if eval < min_eval:
+                min_eval = eval
+                best_move = move
             beta = min(beta, eval)
             if beta <= alpha:
-                break  # Alpha cutoff
+                break
         return min_eval
 
+        
 def find_best_move(board, depth, total_time_remaining):
     """Find the best move for the current player using Alpha-Beta Pruning with Time Management."""
+    PLAYING_WHITE = board.turn
+    print(f"info string Finding best move for {'White' if PLAYING_WHITE else 'Black'} at depth {depth} with total time remaining {total_time_remaining:.2f} seconds")
     best_move = None
-    best_value = -float('inf') if board.turn else float('inf')
+    best_value = -float('inf') if PLAYING_WHITE else float('inf')
     alpha = -float('inf')
     beta = float('inf')
 
@@ -186,16 +197,16 @@ def find_best_move(board, depth, total_time_remaining):
 
     for move in order_moves(board):
         board.push(move)
-        move_value = minimax(board, depth - 1, alpha, beta, not board.turn, start_time, time_limit)
+        move_value = minimax(board, depth - 1, alpha, beta, not PLAYING_WHITE, start_time, time_limit)
         board.pop()
 
         # Update the best move
-        if board.turn:  # Maximizing player
+        if PLAYING_WHITE:
             if move_value > best_value:
                 best_value = move_value
                 best_move = move
             alpha = max(alpha, move_value)
-        else:  # Minimizing player
+        else:
             if move_value < best_value:
                 best_value = move_value
                 best_move = move
@@ -232,7 +243,7 @@ def main():
                         board.push_uci(move_str)
         elif line.startswith("go"):
             tokens = line.split()
-            total_time_remaining = 10  # Default total time in seconds
+            total_time_remaining = 50  # Default total time in seconds
 
             if "depth" in tokens:
                 depth_index = tokens.index("depth") + 1
@@ -249,7 +260,7 @@ def main():
                 print(f"bestmove {best_move.uci()}")
             else:
                 print("bestmove 0000")  # Indicate no legal moves
-                sys.stdout.flush()
+            sys.stdout.flush()
         elif line == "quit":
             break
 
