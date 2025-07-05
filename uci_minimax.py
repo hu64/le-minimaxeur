@@ -5,10 +5,7 @@ import chess.engine
 import time
 import logging
 logging.basicConfig(level=logging.DEBUG)
-
-# Configure logging
-logging.basicConfig(filename="uci_log.txt", level=logging.DEBUG, format="%(asctime)s - %(message)s")
-
+import chess.polyglot
 
 # Material values
 MATERIAL_VALUES = {
@@ -20,17 +17,24 @@ MATERIAL_VALUES = {
     chess.KING: 0  # King is not captured
 }
 
+ZOBRIST_TABLE = {}
+
 # Material evaluation function
 def evaluate_board(board):
+
+    # if chess.polyglot.zobrist_hash(board) in ZOBRIST_TABLE:
+    #     return ZOBRIST_TABLE[chess.polyglot.zobrist_hash(board)]
+
     """Evaluate the board position."""
     if board.is_checkmate():
-        return -float('inf') if board.turn else float('inf')
+        score = -float('inf') if board.turn else float('inf')
+        ZOBRIST_TABLE[chess.polyglot.zobrist_hash(board)] = score
+        return score
 
     if board.is_stalemate() or board.is_insufficient_material():
-        return 0
-
-    # Development bonus
-    development_bonus = 10
+        score = 0
+        ZOBRIST_TABLE[chess.polyglot.zobrist_hash(board)] = score
+        return score
 
     # Calculate material score
     score = 0
@@ -39,26 +43,66 @@ def evaluate_board(board):
         score += len(board.pieces(piece_type, chess.WHITE)) * MATERIAL_VALUES[piece_type]
         score -= len(board.pieces(piece_type, chess.BLACK)) * MATERIAL_VALUES[piece_type]
 
-    # # Add development bonus for White
-    # for square in board.pieces(chess.KNIGHT, chess.WHITE) | board.pieces(chess.BISHOP, chess.WHITE) | board.pieces(chess.ROOK, chess.WHITE) | board.pieces(chess.QUEEN, chess.WHITE):
-    #     if square not in {chess.B1, chess.G1, chess.C1, chess.F1, chess.A1, chess.H1, chess.D1, chess.E1}:  # Starting squares for White
-    #         score += development_bonus
+    mobility_score = 10 * len(list(board.legal_moves))
+    score += mobility_score if board.turn else -mobility_score
 
-    # # Add development bonus for Black
-    # for square in board.pieces(chess.KNIGHT, chess.BLACK) | board.pieces(chess.BISHOP, chess.BLACK) | board.pieces(chess.ROOK, chess.BLACK) | board.pieces(chess.QUEEN, chess.BLACK):
-    #     if square not in {chess.B8, chess.G8, chess.C8, chess.F8, chess.A8, chess.H8, chess.D8, chess.E8}:  # Starting squares for Black
-    #         score -= development_bonus
+    nbr_doubled_pawns = count_doubled_pawns(board, chess.WHITE) - count_doubled_pawns(board, chess.BLACK)
+    nbr_isolated_pawns = count_isolated_pawns(board, chess.WHITE) - count_isolated_pawns(board, chess.BLACK)
+    nbr_blocked_pawns = count_blocked_pawns(board, chess.WHITE) - count_blocked_pawns(board, chess.BLACK)
+    DSI = 50 * (nbr_doubled_pawns + nbr_isolated_pawns + nbr_blocked_pawns)
+    score += DSI
 
-    # # Encourage moves that increase mobility
-    # mobility_bonus = len(list(board.legal_moves)) * 5
-    # score += mobility_bonus if board.turn else -mobility_bonus
-
-    # Penalize threefold repetition
-
-    if board.is_repetition():
-        score -= 50 if board.turn else -50  # Penalize repetition heavily
-        
+    ZOBRIST_TABLE[chess.polyglot.zobrist_hash(board)] = score
     return score
+
+def count_doubled_pawns(board, color):
+    """Count doubled pawns for a given color."""
+    pawns = board.pieces(chess.PAWN, color)
+    files = set()
+    doubled_count = 0
+    for square in pawns:
+        file_index = chess.square_file(square)
+        if file_index in files:
+            doubled_count += 1
+        else:
+            files.add(file_index)
+    return doubled_count
+
+def count_isolated_pawns(board, color):
+    """Count isolated pawns for a given color."""
+    pawns = board.pieces(chess.PAWN, color)
+    isolated_count = 0
+    for square in pawns:
+        file_index = chess.square_file(square)
+        rank_index = chess.square_rank(square)
+
+        # Check if there are no pawns on adjacent files
+        left_file = file_index - 1
+        right_file = file_index + 1
+
+        has_left_pawn = left_file >= 0 and any(
+            chess.square(left_file, rank) in pawns for rank in range(8)
+        )
+        has_right_pawn = right_file <= 7 and any(
+            chess.square(right_file, rank) in pawns for rank in range(8)
+        )
+
+        if not (has_left_pawn or has_right_pawn):
+            isolated_count += 1
+
+    return isolated_count
+
+def count_blocked_pawns(board, color):
+    """Count blocked pawns for a given color."""
+    pawns = board.pieces(chess.PAWN, color)
+    blocked_count = 0
+    for square in pawns:
+        # Check if the pawn is blocked by a piece in front of it
+        if color == chess.WHITE and board.piece_at(square + 8) is not None:
+            blocked_count += 1
+        elif color == chess.BLACK and board.piece_at(square - 8) is not None:
+            blocked_count += 1
+    return blocked_count
 
 # Order moves based on a heuristic
 def order_moves(board):
@@ -111,37 +155,37 @@ def minimax(board, depth, alpha, beta, maximizing_player, start_time, time_limit
         return evaluate_board(board)
 
     if depth <= 0 or board.is_game_over():
-        if any(board.is_capture(move) for move in board.legal_moves):
-            if maximizing_player:
-                max_eval = -float('inf')
-                for move in order_moves(board):
-                    if not board.is_capture(move):  # Only consider captures
-                        continue
-                    board.push(move)
-                    eval = minimax(board, depth - 1, alpha, beta, not maximizing_player, start_time, time_limit)
-                    board.pop()
-                    if eval > max_eval:
-                        max_eval = eval
-                        best_move = move
-                    alpha = max(alpha, eval)
-                    if beta <= alpha:
-                        break
-                return max_eval
-            else:
-                min_eval = float('inf')
-                for move in order_moves(board):
-                    if not board.is_capture(move):  # Only consider captures
-                        continue
-                    board.push(move)
-                    eval = minimax(board, depth - 1, alpha, beta, not maximizing_player, start_time, time_limit)
-                    board.pop()
-                    if eval < min_eval:
-                        min_eval = eval
-                        best_move = move
-                    beta = min(beta, eval)
-                    if beta <= alpha:
-                        break
-                return min_eval
+        # if any(board.is_capture(move) for move in board.legal_moves):
+        #     if maximizing_player:
+        #         max_eval = -float('inf')
+        #         for move in order_moves(board):
+        #             if not board.is_capture(move):
+        #                 continue
+        #             board.push(move)
+        #             eval = minimax(board, depth - 1, alpha, beta, not maximizing_player, start_time, time_limit)
+        #             board.pop()
+        #             if eval > max_eval:
+        #                 max_eval = eval
+        #                 best_move = move
+        #             alpha = max(alpha, eval)
+        #             if beta <= alpha:
+        #                 break
+        #         return max_eval
+        #     else:
+        #         min_eval = float('inf')
+        #         for move in order_moves(board):
+        #             if not board.is_capture(move): 
+        #                 continue
+        #             board.push(move)
+        #             eval = minimax(board, depth - 1, alpha, beta, not maximizing_player, start_time, time_limit)
+        #             board.pop()
+        #             if eval < min_eval:
+        #                 min_eval = eval
+        #                 best_move = move
+        #             beta = min(beta, eval)
+        #             if beta <= alpha:
+        #                 break
+        #         return min_eval
         return evaluate_board(board)
 
     best_move = None
@@ -173,7 +217,6 @@ def minimax(board, depth, alpha, beta, maximizing_player, start_time, time_limit
                 break
         return min_eval
 
-        
 def find_best_move(board, depth, total_time_remaining):
     """Find the best move for the current player using Alpha-Beta Pruning with Time Management."""
     PLAYING_WHITE = board.turn
@@ -188,17 +231,26 @@ def find_best_move(board, depth, total_time_remaining):
     start_time = time.time()  # Record the start time
 
     for move in order_moves(board):
+        if best_move is None:
+            best_move = move
         board.push(move)
         move_value = minimax(board, depth - 1, alpha, beta, not PLAYING_WHITE, start_time, time_limit)
+        if board.is_repetition():
+            print(f"info string Move {move.uci()} is a repetition, skipping")
+            move_value -= 100 if PLAYING_WHITE else 100
         board.pop()
 
         # Update the best move
         if PLAYING_WHITE:
+            # if move.is_repetition():
+            #     move_value -= 100
             if move_value > best_value:
                 best_value = move_value
                 best_move = move
             alpha = max(alpha, move_value)
         else:
+            # if move.is_repetition():
+            #     move_value += 100
             if move_value < best_value:
                 best_value = move_value
                 best_move = move
@@ -210,10 +262,23 @@ def find_best_move(board, depth, total_time_remaining):
 
     return best_move
 
+def find_best_move_iterative(board, max_depth, total_time_remaining):
+    """Find the best move using iterative deepening."""
+    best_move = None
+    for depth in range(1, max_depth + 1):
+        print(f"info string Searching at depth {depth}")
+        move = find_best_move(board, depth, total_time_remaining)
+        if move is not None:
+            best_move = move
+        else:
+            print("info string No legal moves found")
+            break
+    return best_move
+
 # UCI-compatible engine
 def main():
     board = chess.Board()
-    depth = 4
+    depth = 5
 
     while True:
         line = sys.stdin.readline().strip()
@@ -249,7 +314,7 @@ def main():
                 time_index = tokens.index("btime") + 1
                 total_time_remaining = int(tokens[time_index]) / 1000  # Convert milliseconds to seconds
 
-            best_move = find_best_move(board, depth, total_time_remaining)
+            best_move = find_best_move_iterative(board, depth, total_time_remaining)
             if best_move is not None:
                 print(f"bestmove {best_move.uci()}")
             else:
